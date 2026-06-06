@@ -6,15 +6,19 @@ import com.intellij.openapi.project.Project;
 import edu.calpoly.csc.codevisualizerplugin.analysis.JavaFileMetric;
 import edu.calpoly.csc.codevisualizerplugin.analysis.ProjectAnalysisResult;
 import edu.calpoly.csc.codevisualizerplugin.analysis.ProjectPsiAnalyzer;
+import edu.calpoly.csc.codevisualizerplugin.diagram.PlantUmlRenderer;
 
 import javax.swing.BorderFactory;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
+import javax.swing.SwingConstants;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -23,6 +27,7 @@ import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.io.IOException;
 import java.util.List;
 
 final class CodeVisualizerToolWindow {
@@ -31,8 +36,10 @@ final class CodeVisualizerToolWindow {
     private final JPanel gridPanel;
     private final JLabel gridStatusLabel;
     private final MetricsPlotPanel metricsPlotPanel;
+    private final JLabel plantUmlImageLabel;
     private final JTextArea plantUmlOutput;
     private final ProjectPsiAnalyzer analyzer;
+    private final PlantUmlRenderer plantUmlRenderer;
 
     CodeVisualizerToolWindow(Project project) {
         this.project = project;
@@ -40,8 +47,10 @@ final class CodeVisualizerToolWindow {
         this.gridPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 8));
         this.gridStatusLabel = new JLabel("No analysis has been run yet.");
         this.metricsPlotPanel = new MetricsPlotPanel();
+        this.plantUmlImageLabel = new JLabel("Run Analyze Project to render the diagram.", SwingConstants.CENTER);
         this.plantUmlOutput = createReadOnlyTextArea("@startuml\n' PlantUML diagram will appear here after analysis.\n@enduml");
         this.analyzer = new ProjectPsiAnalyzer();
+        this.plantUmlRenderer = new PlantUmlRenderer();
 
         content.add(createTabs(), BorderLayout.CENTER);
     }
@@ -54,7 +63,7 @@ final class CodeVisualizerToolWindow {
         JTabbedPane tabs = new JTabbedPane();
         tabs.addTab("Grid", createGridTab());
         tabs.addTab("Metrics", new JScrollPane(metricsPlotPanel));
-        tabs.addTab("PlantUML", new JScrollPane(plantUmlOutput));
+        tabs.addTab("PlantUML", createPlantUmlTab());
         return tabs;
     }
 
@@ -74,16 +83,44 @@ final class CodeVisualizerToolWindow {
         return gridTab;
     }
 
+    private JComponent createPlantUmlTab() {
+        plantUmlImageLabel.setVerticalAlignment(SwingConstants.TOP);
+        plantUmlImageLabel.setHorizontalAlignment(SwingConstants.LEFT);
+        plantUmlImageLabel.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+
+        JSplitPane splitPane = new JSplitPane(
+                JSplitPane.VERTICAL_SPLIT,
+                new JScrollPane(plantUmlImageLabel),
+                new JScrollPane(plantUmlOutput)
+        );
+        splitPane.setResizeWeight(0.72);
+        return splitPane;
+    }
+
     private void analyzeProject() {
         ProjectAnalysisResult result = ReadAction.compute(() -> analyzer.analyze(project));
 
         gridStatusLabel.setText(result.javaFileCount() + " Java files, "
                 + result.totalClassCount() + " classes, "
-                + result.totalMethodCount() + " methods");
+                + result.totalMethodCount() + " methods, "
+                + result.totalRelationshipCount() + " relationships");
         renderGrid(result.files());
         metricsPlotPanel.setMetrics(result.files());
-        plantUmlOutput.setText(result.plantUml());
+        renderPlantUml(result.plantUml());
+    }
+
+    private void renderPlantUml(String plantUml) {
+        plantUmlOutput.setText(plantUml);
         plantUmlOutput.setCaretPosition(0);
+
+        try {
+            ImageIcon diagram = plantUmlRenderer.renderPng(plantUml);
+            plantUmlImageLabel.setText(null);
+            plantUmlImageLabel.setIcon(diagram);
+        } catch (IOException exception) {
+            plantUmlImageLabel.setIcon(null);
+            plantUmlImageLabel.setText("PlantUML render failed: " + exception.getMessage());
+        }
     }
 
     private void renderGrid(List<JavaFileMetric> metrics) {
@@ -105,6 +142,7 @@ final class CodeVisualizerToolWindow {
         JButton tile = new JButton("<html><b>" + metric.fileName() + "</b><br/>"
                 + "Classes: " + metric.classCount() + "<br/>"
                 + "Methods: " + metric.methodCount() + "<br/>"
+                + "Constructors: " + metric.constructorCount() + "<br/>"
                 + "Branches: " + metric.branchCount() + "</html>");
         tile.setToolTipText(metric.relativePath());
         tile.setPreferredSize(new Dimension(170, 110));

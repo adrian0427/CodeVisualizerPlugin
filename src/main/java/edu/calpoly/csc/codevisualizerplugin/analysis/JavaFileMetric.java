@@ -9,18 +9,19 @@ public record JavaFileMetric(
         String packageName,
         String relativePath,
         VirtualFile virtualFile,
-        List<String> classNames,
+        List<JavaClassInfo> classes,
         int classCount,
         int methodCount,
+        int constructorCount,
         int fieldCount,
         int branchCount
 ) {
     public JavaFileMetric {
-        classNames = List.copyOf(classNames);
+        classes = List.copyOf(classes);
     }
 
     public int score() {
-        return classCount + methodCount + fieldCount + branchCount;
+        return classCount + methodCount + constructorCount + fieldCount + branchCount;
     }
 
     public MetricLevel level() {
