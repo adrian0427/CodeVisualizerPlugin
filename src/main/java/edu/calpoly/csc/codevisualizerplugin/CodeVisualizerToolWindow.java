@@ -4,6 +4,7 @@ import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.project.Project;
 import edu.calpoly.csc.codevisualizerplugin.analysis.JavaFileMetric;
+import edu.calpoly.csc.codevisualizerplugin.analysis.MetricLevel;
 import edu.calpoly.csc.codevisualizerplugin.analysis.ProjectAnalysisResult;
 import edu.calpoly.csc.codevisualizerplugin.analysis.ProjectPsiAnalyzer;
 import edu.calpoly.csc.codevisualizerplugin.diagram.PlantUmlRenderer;
@@ -40,6 +41,7 @@ final class CodeVisualizerToolWindow {
     private final JTextArea plantUmlOutput;
     private final ProjectPsiAnalyzer analyzer;
     private final PlantUmlRenderer plantUmlRenderer;
+    private  javax.swing.JTable MetricTable;
 
     CodeVisualizerToolWindow(Project project) {
         this.project = project;
@@ -62,8 +64,10 @@ final class CodeVisualizerToolWindow {
     private JTabbedPane createTabs() {
         JTabbedPane tabs = new JTabbedPane();
         tabs.addTab("Grid", createGridTab());
-        tabs.addTab("Metrics", new JScrollPane(metricsPlotPanel));
+        tabs.addTab("Metrics Plot", new JScrollPane(metricsPlotPanel));
+        tabs.addTab("Metrics Table", createMetricsTab(List.of()));
         tabs.addTab("PlantUML", createPlantUmlTab());
+
         return tabs;
     }
 
@@ -75,23 +79,73 @@ final class CodeVisualizerToolWindow {
         JPanel header = new JPanel(new BorderLayout(8, 8));
         header.add(analyzeButton, BorderLayout.WEST);
         header.add(gridStatusLabel, BorderLayout.CENTER);
+        JPanel legendPanel = new JPanel(new FlowLayout(FlowLayout.LEFT,20,5));
+        legendPanel.setBorder(BorderFactory.createTitledBorder("Complexity Color"));
+
+        JPanel low_green = new JPanel();
+        low_green.setBackground(MetricLevel.LOW.color());
+        low_green.setPreferredSize(new Dimension(20,20));
+        legendPanel.add(low_green);
+        legendPanel.add(new JLabel("Low Complexity"));
+
+        JPanel medium_orange  = new JPanel();
+        medium_orange.setBackground(MetricLevel.MEDIUM.color());
+        medium_orange.setPreferredSize(new Dimension(20,20));
+        legendPanel.add(medium_orange);
+        legendPanel.add(new JLabel("Medium Complexity"));
+
+        JPanel high_red = new JPanel();
+        high_red.setBackground(MetricLevel.HIGH.color());
+        high_red.setPreferredSize(new Dimension(20,20));
+        legendPanel.add(high_red);
+        legendPanel.add(new JLabel("High Complexity"));
+
+
+
 
         gridPanel.add(new JLabel("Grid tiles will appear here after analysis."));
 
         gridTab.add(header, BorderLayout.NORTH);
+        gridTab.add(legendPanel,BorderLayout.AFTER_LAST_LINE);
         gridTab.add(new JScrollPane(gridPanel), BorderLayout.CENTER);
         return gridTab;
+    }
+    private JComponent createMetricsTab(List<JavaFileMetric> metrics){
+        JPanel metrics_tab = new JPanel(new BorderLayout());
+        String[] col_names = {"File","Classes","Methods","Constructors","Fields","Branches","Score"};
+        Object[][] num = new Object[metrics.size()][7];
+
+        for (int i = 0; i < metrics.size();i++){
+            JavaFileMetric m = metrics.get(i);
+            num[i][0] = m.fileName();
+            num[i][1] = m.classCount();
+            num[i][2] = m.methodCount();
+            num[i][3] = m.constructorCount();
+            num[i][4] = m.fieldCount();
+            num[i][5] = m.branchCount();
+            num[i][6] = m.score();
+        }
+        javax.swing.table.DefaultTableModel model = new javax.swing.table.DefaultTableModel(num, col_names);
+        MetricTable = new javax.swing.JTable(model);
+        MetricTable.setRowHeight(30);
+        metrics_tab.add( new JScrollPane(MetricTable),BorderLayout.CENTER);
+        return  metrics_tab;
     }
 
     private JComponent createPlantUmlTab() {
         plantUmlImageLabel.setVerticalAlignment(SwingConstants.TOP);
         plantUmlImageLabel.setHorizontalAlignment(SwingConstants.LEFT);
         plantUmlImageLabel.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
-
+        JPanel image = new JPanel(new BorderLayout());
+        image.add(new JLabel("Render Diagram"), BorderLayout.NORTH);
+        image.add(new JScrollPane(plantUmlImageLabel), BorderLayout.CENTER);
+        JPanel PlantUML = new JPanel(new BorderLayout());
+        PlantUML.add(new JLabel("PlantUML"),BorderLayout.NORTH);
+        PlantUML.add(new JScrollPane(plantUmlOutput),BorderLayout.CENTER);
         JSplitPane splitPane = new JSplitPane(
                 JSplitPane.VERTICAL_SPLIT,
-                new JScrollPane(plantUmlImageLabel),
-                new JScrollPane(plantUmlOutput)
+                image,
+                PlantUML
         );
         splitPane.setResizeWeight(0.72);
         return splitPane;
@@ -106,7 +160,25 @@ final class CodeVisualizerToolWindow {
                 + result.totalRelationshipCount() + " relationships");
         renderGrid(result.files());
         metricsPlotPanel.setMetrics(result.files());
+        UpdateMetricsTable(result.files());
         renderPlantUml(result.plantUml());
+    }
+    private void UpdateMetricsTable(List<JavaFileMetric> metrics){
+        String[] col_names = {"File","Classes","Methods","Constructors","Fields","Branches","Score"};
+        Object[][] num = new Object[metrics.size()][7];
+
+        for (int i = 0; i < metrics.size();i++){
+            JavaFileMetric m = metrics.get(i);
+            num[i][0] = m.fileName();
+            num[i][1] = m.classCount();
+            num[i][2] = m.methodCount();
+            num[i][3] = m.constructorCount();
+            num[i][4] = m.fieldCount();
+            num[i][5] = m.branchCount();
+            num[i][6] = m.score();
+        }
+        javax.swing.table.DefaultTableModel model = new javax.swing.table.DefaultTableModel(num,col_names);
+        MetricTable.setModel(model);
     }
 
     private void renderPlantUml(String plantUml) {
