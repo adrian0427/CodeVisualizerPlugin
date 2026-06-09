@@ -15,6 +15,7 @@ CodeVisualizerPlugin is an IntelliJ IDEA plugin for visualizing Java code in the
 - Scans `.java` files in the project.
 - Shows three tabs: `Grid`, `Metrics`, and `PlantUML`.
 - Opens source files when grid tiles are clicked.
+- Shows package design metrics with sortable rows, hover tooltips, and click-to-highlight plot points.
 - Renders a PlantUML class diagram inside the plugin.
 
 ## Metrics
@@ -49,7 +50,7 @@ Relationships are extracted from PSI using inheritance, interface implementation
 | Tab | Purpose |
 | --- | --- |
 | Grid | Shows one colored tile per Java file. Tile color is based on the file score: green = low, orange = medium, red = high. Clicking a tile opens the source file. |
-| Metrics | Shows a package-level Abstractness vs. Instability plot with the main sequence line, plus a sortable package metrics table. |
+| Metrics | Shows a package-level Abstractness vs. Instability plot with the main sequence line, plus a sortable package metrics table. Hovering over a plot point shows package details. Clicking a table row highlights that package on the plot. |
 | PlantUML | Shows a rendered PlantUML class diagram and the generated PlantUML source text. |
 
 ## Class Diagram
@@ -80,6 +81,22 @@ cd CodeVisualizerPlugin
 3. Go to `View -> Tool Windows -> Code Visualizer`.
 4. Click `Analyze Project`.
 5. Review the `Grid`, `Metrics`, and `PlantUML` tabs.
+6. In the `Metrics` tab, click a package row to highlight it on the plot.
+7. Hover over package dots to inspect exact metric values.
+
+## Manual Test Checklist
+
+- Run `./gradlew build`.
+- Run `./gradlew runIde`.
+- Open a Java project in the sandbox IDE.
+- Open `View -> Tool Windows -> Code Visualizer`.
+- Click `Analyze Project`.
+- Confirm the `Grid` tab shows Java file tiles.
+- Confirm clicking a grid tile opens the source file.
+- Confirm the `Metrics` tab shows package dots and a sortable table.
+- Confirm clicking a metrics table row highlights the matching package dot.
+- Confirm hovering over package dots shows package metrics.
+- Confirm the `PlantUML` tab shows generated PlantUML text and a rendered diagram when rendering is available.
 
 ## Assignment Checklist
 
@@ -101,6 +118,7 @@ cd CodeVisualizerPlugin
 - LOC counts non-blank lines, not comment-free source lines.
 - Rough CC is a lightweight branch-based estimate, not a full formal cyclomatic complexity engine.
 - Dependency metrics include project-internal class relationships that can be resolved by PSI.
+- PlantUML rendering uses the bundled PlantUML library. If rendering is unavailable in a local environment, the generated PlantUML text remains visible for inspection.
 
 ## Demo Video
 
