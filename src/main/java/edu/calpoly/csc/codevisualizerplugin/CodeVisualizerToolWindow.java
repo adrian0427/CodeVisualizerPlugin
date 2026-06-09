@@ -2,6 +2,9 @@ package edu.calpoly.csc.codevisualizerplugin;
 
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.fileEditor.FileEditorManager;
+import com.intellij.openapi.progress.ProgressIndicator;
+import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
 import edu.calpoly.csc.codevisualizerplugin.analysis.JavaFileMetric;
 import edu.calpoly.csc.codevisualizerplugin.analysis.MetricLevel;
@@ -158,8 +161,31 @@ final class CodeVisualizerToolWindow {
     }
 
     private void analyzeProject() {
-        ProjectAnalysisResult result = ReadAction.compute(() -> analyzer.analyze(project));
+        gridStatusLabel.setText("Analyzing project...");
+        ProgressManager.getInstance().run(new Task.Backgroundable(project, "Analyzing Code Visualizer Project", false) {
+            @Override
+            public void run(ProgressIndicator indicator) {
+                indicator.setIndeterminate(true);
+                try {
+                    ProjectAnalysisResult result = ReadAction.compute(() -> analyzer.analyze(project));
+                    RenderedPlantUml renderedPlantUml = renderPlantUmlInBackground(result.plantUml());
+                    javax.swing.SwingUtilities.invokeLater(() -> applyAnalysisResult(result, renderedPlantUml));
+                } catch (RuntimeException exception) {
+                    javax.swing.SwingUtilities.invokeLater(() -> showAnalysisError(exception));
+                }
+            }
+        });
+    }
 
+    private RenderedPlantUml renderPlantUmlInBackground(String plantUml) {
+        try {
+            return new RenderedPlantUml(plantUmlRenderer.renderPng(plantUml), null);
+        } catch (IOException exception) {
+            return new RenderedPlantUml(null, exception);
+        }
+    }
+
+    private void applyAnalysisResult(ProjectAnalysisResult result, RenderedPlantUml renderedPlantUml) {
         gridStatusLabel.setText(result.javaFileCount() + " Java files, "
                 + result.totalClassCount() + " classes, "
                 + result.totalMethodCount() + " methods, "
@@ -168,7 +194,13 @@ final class CodeVisualizerToolWindow {
         renderGrid(result.files());
         metricsPlotPanel.setMetrics(result.packages());
         updateMetricsTable(result.packages());
-        renderPlantUml(result.plantUml());
+        renderPlantUml(result.plantUml(), renderedPlantUml);
+    }
+
+    private void showAnalysisError(RuntimeException exception) {
+        gridStatusLabel.setText("Analysis failed: " + exception.getMessage());
+        plantUmlImageLabel.setIcon(null);
+        plantUmlImageLabel.setText("Analysis failed. See IDE logs for details.");
     }
 
     private void updateMetricsTable(List<PackageMetric> metrics) {
@@ -197,17 +229,16 @@ final class CodeVisualizerToolWindow {
         return String.format("%.2f", value);
     }
 
-    private void renderPlantUml(String plantUml) {
+    private void renderPlantUml(String plantUml, RenderedPlantUml renderedPlantUml) {
         plantUmlOutput.setText(plantUml);
         plantUmlOutput.setCaretPosition(0);
 
-        try {
-            ImageIcon diagram = plantUmlRenderer.renderPng(plantUml);
+        if (renderedPlantUml.diagram() != null) {
             plantUmlImageLabel.setText(null);
-            plantUmlImageLabel.setIcon(diagram);
-        } catch (IOException exception) {
+            plantUmlImageLabel.setIcon(renderedPlantUml.diagram());
+        } else {
             plantUmlImageLabel.setIcon(null);
-            plantUmlImageLabel.setText("PlantUML render failed: " + exception.getMessage());
+            plantUmlImageLabel.setText("PlantUML render failed: " + renderedPlantUml.error().getMessage());
         }
     }
 
@@ -250,6 +281,9 @@ final class CodeVisualizerToolWindow {
         textArea.setLineWrap(true);
         textArea.setWrapStyleWord(true);
         return textArea;
+    }
+
+    private record RenderedPlantUml(ImageIcon diagram, IOException error) {
     }
 
     private static final class MetricsPlotPanel extends JPanel {

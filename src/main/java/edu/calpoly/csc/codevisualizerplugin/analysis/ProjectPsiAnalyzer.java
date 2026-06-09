@@ -184,6 +184,7 @@ public final class ProjectPsiAnalyzer {
     private String createPlantUml(String projectName, List<JavaClassInfo> classes, List<JavaRelationship> relationships) {
         StringBuilder builder = new StringBuilder();
         builder.append("@startuml\n");
+        builder.append("!pragma layout smetana\n");
         builder.append("title ").append(projectName).append(" Java Classes\n");
         builder.append("skinparam classAttributeIconSize 0\n");
         builder.append("hide empty members\n");
