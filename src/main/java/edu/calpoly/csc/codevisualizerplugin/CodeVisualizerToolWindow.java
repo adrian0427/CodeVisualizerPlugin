@@ -64,8 +64,7 @@ final class CodeVisualizerToolWindow {
     private JTabbedPane createTabs() {
         JTabbedPane tabs = new JTabbedPane();
         tabs.addTab("Grid", createGridTab());
-        tabs.addTab("Metrics Plot", new JScrollPane(metricsPlotPanel));
-        tabs.addTab("Metrics Table", createMetricsTab(List.of()));
+        tabs.addTab("Metrics", createMetricsTab(List.of()));
         tabs.addTab("PlantUML", createPlantUmlTab());
 
         return tabs;
@@ -128,7 +127,13 @@ final class CodeVisualizerToolWindow {
         javax.swing.table.DefaultTableModel model = new javax.swing.table.DefaultTableModel(num, col_names);
         MetricTable = new javax.swing.JTable(model);
         MetricTable.setRowHeight(30);
-        metrics_tab.add( new JScrollPane(MetricTable),BorderLayout.CENTER);
+        JSplitPane splitPane = new JSplitPane(
+                JSplitPane.VERTICAL_SPLIT,
+                new JScrollPane(metricsPlotPanel),
+                new JScrollPane(MetricTable)
+        );
+        splitPane.setResizeWeight(0.65);
+        metrics_tab.add(splitPane,BorderLayout.CENTER);
         return  metrics_tab;
     }
 
