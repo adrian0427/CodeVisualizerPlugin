@@ -68,6 +68,7 @@ public final class ProjectPsiAnalyzer {
                 metrics,
                 classes,
                 projectRelationships,
+                createPackageMetrics(classes, projectRelationships),
                 createPlantUml(project.getName(), classes, projectRelationships)
         );
     }
@@ -86,10 +87,98 @@ public final class ProjectPsiAnalyzer {
                 visitor.methodCount(),
                 visitor.constructorCount(),
                 visitor.fieldCount(),
-                visitor.branchCount()
+                visitor.branchCount(),
+                countLinesOfCode(psiJavaFile)
         );
 
         return new FileAnalysis(metric, visitor.classes(), visitor.relationships());
+    }
+
+    private List<PackageMetric> createPackageMetrics(List<JavaClassInfo> classes, List<JavaRelationship> relationships) {
+        Map<String, List<JavaClassInfo>> classesByPackage = classes.stream()
+                .collect(Collectors.groupingBy(
+                        JavaClassInfo::packageName,
+                        java.util.LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+
+        return classesByPackage.entrySet().stream()
+                .map(entry -> createPackageMetric(entry.getKey(), entry.getValue(), relationships, classes))
+                .sorted(Comparator.comparing(PackageMetric::packageName))
+                .toList();
+    }
+
+    private PackageMetric createPackageMetric(
+            String packageName,
+            List<JavaClassInfo> packageClasses,
+            List<JavaRelationship> relationships,
+            List<JavaClassInfo> allClasses
+    ) {
+        Map<String, String> classPackages = allClasses.stream()
+                .collect(Collectors.toMap(
+                        JavaClassInfo::qualifiedName,
+                        JavaClassInfo::packageName,
+                        (left, right) -> left
+                ));
+        Set<String> packageClassNames = packageClasses.stream()
+                .map(JavaClassInfo::qualifiedName)
+                .collect(Collectors.toSet());
+
+        int incomingDependencies = 0;
+        int outgoingDependencies = 0;
+
+        for (JavaRelationship relationship : relationships) {
+            boolean sourceInPackage = packageClassNames.contains(relationship.sourceQualifiedName());
+            boolean targetInPackage = packageClassNames.contains(relationship.targetQualifiedName());
+            if (sourceInPackage == targetInPackage) {
+                continue;
+            }
+            if (sourceInPackage) {
+                String targetPackage = classPackages.get(relationship.targetQualifiedName());
+                if (!packageName.equals(targetPackage)) {
+                    outgoingDependencies++;
+                }
+            } else if (targetInPackage) {
+                String sourcePackage = classPackages.get(relationship.sourceQualifiedName());
+                if (!packageName.equals(sourcePackage)) {
+                    incomingDependencies++;
+                }
+            }
+        }
+
+        int abstractClassCount = (int) packageClasses.stream()
+                .filter(this::isAbstractDesignElement)
+                .count();
+        double abstractness = packageClasses.isEmpty() ? 0.0 : abstractClassCount / (double) packageClasses.size();
+        double instabilityDenominator = incomingDependencies + outgoingDependencies;
+        double instability = instabilityDenominator == 0.0 ? 0.0 : outgoingDependencies / instabilityDenominator;
+        double distanceFromMainSequence = Math.abs(abstractness + instability - 1.0);
+
+        return new PackageMetric(
+                packageName.isBlank() ? "(default)" : packageName,
+                packageClasses.size(),
+                abstractClassCount,
+                incomingDependencies,
+                outgoingDependencies,
+                abstractness,
+                instability,
+                distanceFromMainSequence
+        );
+    }
+
+    private boolean isAbstractDesignElement(JavaClassInfo classInfo) {
+        return classInfo.kind() == ClassKind.ABSTRACT_CLASS || classInfo.kind() == ClassKind.INTERFACE;
+    }
+
+    private int countLinesOfCode(PsiJavaFile psiJavaFile) {
+        String text = psiJavaFile.getText();
+        int linesOfCode = 0;
+        for (String line : text.split("\\R")) {
+            if (!line.isBlank()) {
+                linesOfCode++;
+            }
+        }
+        return linesOfCode;
     }
 
     private String createPlantUml(String projectName, List<JavaClassInfo> classes, List<JavaRelationship> relationships) {

@@ -8,6 +8,7 @@ public record ProjectAnalysisResult(
         List<JavaFileMetric> files,
         List<JavaClassInfo> classes,
         List<JavaRelationship> relationships,
+        List<PackageMetric> packages,
         String plantUml
 ) {
     public ProjectAnalysisResult {
@@ -16,6 +17,7 @@ public record ProjectAnalysisResult(
                 .toList();
         classes = List.copyOf(classes);
         relationships = List.copyOf(relationships);
+        packages = List.copyOf(packages);
     }
 
     public int javaFileCount() {
@@ -32,5 +34,9 @@ public record ProjectAnalysisResult(
 
     public int totalRelationshipCount() {
         return relationships.size();
+    }
+
+    public int totalLinesOfCode() {
+        return files.stream().mapToInt(JavaFileMetric::linesOfCode).sum();
     }
 }

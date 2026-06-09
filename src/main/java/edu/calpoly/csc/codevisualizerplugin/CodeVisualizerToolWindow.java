@@ -5,6 +5,7 @@ import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.project.Project;
 import edu.calpoly.csc.codevisualizerplugin.analysis.JavaFileMetric;
 import edu.calpoly.csc.codevisualizerplugin.analysis.MetricLevel;
+import edu.calpoly.csc.codevisualizerplugin.analysis.PackageMetric;
 import edu.calpoly.csc.codevisualizerplugin.analysis.ProjectAnalysisResult;
 import edu.calpoly.csc.codevisualizerplugin.analysis.ProjectPsiAnalyzer;
 import edu.calpoly.csc.codevisualizerplugin.diagram.PlantUmlRenderer;
@@ -35,13 +36,14 @@ import java.util.List;
 
 final class CodeVisualizerToolWindow {
     private static final String[] METRIC_TABLE_COLUMNS = {
-            "File",
+            "Package",
             "Classes",
-            "Methods",
-            "Constructors",
-            "Fields",
-            "Branches",
-            "Score"
+            "Abstract",
+            "Incoming",
+            "Outgoing",
+            "A",
+            "I",
+            "D"
     };
 
     private final Project project;
@@ -120,9 +122,10 @@ final class CodeVisualizerToolWindow {
         return swatch;
     }
 
-    private JComponent createMetricsTab(List<JavaFileMetric> metrics) {
+    private JComponent createMetricsTab(List<PackageMetric> metrics) {
         JPanel metricsTab = new JPanel(new BorderLayout());
         metricTable = new JTable(createMetricTableModel(metrics));
+        metricTable.setAutoCreateRowSorter(true);
         metricTable.setRowHeight(30);
 
         JSplitPane splitPane = new JSplitPane(
@@ -160,32 +163,38 @@ final class CodeVisualizerToolWindow {
         gridStatusLabel.setText(result.javaFileCount() + " Java files, "
                 + result.totalClassCount() + " classes, "
                 + result.totalMethodCount() + " methods, "
+                + result.totalLinesOfCode() + " LOC, "
                 + result.totalRelationshipCount() + " relationships");
         renderGrid(result.files());
-        metricsPlotPanel.setMetrics(result.files());
-        updateMetricsTable(result.files());
+        metricsPlotPanel.setMetrics(result.packages());
+        updateMetricsTable(result.packages());
         renderPlantUml(result.plantUml());
     }
 
-    private void updateMetricsTable(List<JavaFileMetric> metrics) {
+    private void updateMetricsTable(List<PackageMetric> metrics) {
         metricTable.setModel(createMetricTableModel(metrics));
     }
 
-    private DefaultTableModel createMetricTableModel(List<JavaFileMetric> metrics) {
+    private DefaultTableModel createMetricTableModel(List<PackageMetric> metrics) {
         Object[][] rows = new Object[metrics.size()][METRIC_TABLE_COLUMNS.length];
 
         for (int i = 0; i < metrics.size(); i++) {
-            JavaFileMetric metric = metrics.get(i);
-            rows[i][0] = metric.fileName();
+            PackageMetric metric = metrics.get(i);
+            rows[i][0] = metric.packageName();
             rows[i][1] = metric.classCount();
-            rows[i][2] = metric.methodCount();
-            rows[i][3] = metric.constructorCount();
-            rows[i][4] = metric.fieldCount();
-            rows[i][5] = metric.branchCount();
-            rows[i][6] = metric.score();
+            rows[i][2] = metric.abstractClassCount();
+            rows[i][3] = metric.incomingDependencies();
+            rows[i][4] = metric.outgoingDependencies();
+            rows[i][5] = formatMetric(metric.abstractness());
+            rows[i][6] = formatMetric(metric.instability());
+            rows[i][7] = formatMetric(metric.distanceFromMainSequence());
         }
 
         return new DefaultTableModel(rows, METRIC_TABLE_COLUMNS);
+    }
+
+    private String formatMetric(double value) {
+        return String.format("%.2f", value);
     }
 
     private void renderPlantUml(String plantUml) {
@@ -222,7 +231,8 @@ final class CodeVisualizerToolWindow {
                 + "Classes: " + metric.classCount() + "<br/>"
                 + "Methods: " + metric.methodCount() + "<br/>"
                 + "Constructors: " + metric.constructorCount() + "<br/>"
-                + "Branches: " + metric.branchCount() + "</html>");
+                + "LOC: " + metric.linesOfCode() + "<br/>"
+                + "Rough CC: " + metric.roughCyclomaticComplexity() + "</html>");
         tile.setToolTipText(metric.relativePath());
         tile.setPreferredSize(new Dimension(170, 110));
         tile.setBackground(metric.level().color());
@@ -243,14 +253,14 @@ final class CodeVisualizerToolWindow {
     }
 
     private static final class MetricsPlotPanel extends JPanel {
-        private List<JavaFileMetric> metrics = List.of();
+        private List<PackageMetric> metrics = List.of();
 
         private MetricsPlotPanel() {
             setPreferredSize(new Dimension(720, 480));
             setBackground(Color.WHITE);
         }
 
-        void setMetrics(List<JavaFileMetric> metrics) {
+        void setMetrics(List<PackageMetric> metrics) {
             this.metrics = List.copyOf(metrics);
             repaint();
         }
@@ -269,40 +279,43 @@ final class CodeVisualizerToolWindow {
             g2.setColor(new Color(64, 64, 64));
             g2.drawLine(left, bottom, right, bottom);
             g2.drawLine(left, bottom, left, top);
-            g2.drawString("Methods", right - 56, bottom + 28);
-            g2.drawString("Fields + Branches", 8, top + 8);
+            g2.drawString("Instability (I)", right - 86, bottom + 28);
+            g2.drawString("Abstractness (A)", 8, top + 8);
+            g2.drawString("main sequence", left + 12, bottom - 12);
+            g2.drawLine(left, bottom, right, top);
 
             if (metrics.isEmpty()) {
-                g2.drawString("Run Analyze Project to plot Java files.", left + 16, top + 32);
+                g2.drawString("Run Analyze Project to plot packages.", left + 16, top + 32);
                 g2.dispose();
                 return;
             }
 
-            int maxMethods = Math.max(1, metrics.stream().mapToInt(JavaFileMetric::methodCount).max().orElse(1));
-            int maxWeight = Math.max(1, metrics.stream()
-                    .mapToInt(metric -> metric.fieldCount() + metric.branchCount())
-                    .max()
-                    .orElse(1));
-
-            for (JavaFileMetric metric : metrics) {
-                int x = left + scale(metric.methodCount(), maxMethods, right - left);
-                int y = bottom - scale(metric.fieldCount() + metric.branchCount(), maxWeight, bottom - top);
+            for (PackageMetric metric : metrics) {
+                int x = left + scale(metric.instability(), right - left);
+                int y = bottom - scale(metric.abstractness(), bottom - top);
                 int diameter = 12 + Math.min(20, metric.classCount() * 4);
 
-                g2.setColor(metric.level().color());
+                g2.setColor(distanceColor(metric.distanceFromMainSequence()));
                 g2.fillOval(x - diameter / 2, y - diameter / 2, diameter, diameter);
                 g2.setColor(new Color(32, 32, 32));
-                drawFittedLabel(g2, metric.fileName(), x + 8, y - 8, right - x - 8);
+                drawFittedLabel(g2, metric.packageName(), x + 8, y - 8, right - x - 8);
             }
 
             g2.dispose();
         }
 
-        private int scale(int value, int max, int length) {
-            if (max == 0) {
-                return 0;
+        private int scale(double value, int length) {
+            return (int) Math.round(Math.max(0.0, Math.min(1.0, value)) * length);
+        }
+
+        private Color distanceColor(double distance) {
+            if (distance >= 0.67) {
+                return MetricLevel.HIGH.color();
             }
-            return (int) Math.round((value / (double) max) * length);
+            if (distance >= 0.34) {
+                return MetricLevel.MEDIUM.color();
+            }
+            return MetricLevel.LOW.color();
         }
 
         private void drawFittedLabel(Graphics2D g2, String text, int x, int y, int maxWidth) {

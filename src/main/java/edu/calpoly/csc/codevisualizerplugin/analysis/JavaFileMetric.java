@@ -14,14 +14,19 @@ public record JavaFileMetric(
         int methodCount,
         int constructorCount,
         int fieldCount,
-        int branchCount
+        int branchCount,
+        int linesOfCode
 ) {
     public JavaFileMetric {
         classes = List.copyOf(classes);
     }
 
     public int score() {
-        return classCount + methodCount + constructorCount + fieldCount + branchCount;
+        return classCount + methodCount + constructorCount + fieldCount + branchCount + roughCyclomaticComplexity();
+    }
+
+    public int roughCyclomaticComplexity() {
+        return branchCount + 1;
     }
 
     public MetricLevel level() {
