@@ -78,3 +78,6 @@ cd CodeVisualizerPlugin
 ## Assumptions and Limitations
 -only works with Java projects in Intellij IDEA
 
+## Demo Video
+
+[Watch Code Visualizer Plugin Demo](https://www.youtube.com/watch?v=HM_iBdq9DX8)
