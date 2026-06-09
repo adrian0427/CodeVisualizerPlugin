@@ -124,4 +124,4 @@ cd final-project-angelandadrian
 
 ## Demo Video
 
-[Watch Code Visualizer Plugin Demo](https://www.youtube.com/watch?v=HM_iBdq9DX8)
+[Watch Code Visualizer Plugin Demo](https://www.youtube.com/watch?v=cNidgZWfKtQ)
