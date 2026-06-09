@@ -35,9 +35,11 @@ import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 final class CodeVisualizerToolWindow {
@@ -324,10 +326,12 @@ final class CodeVisualizerToolWindow {
         private static final int BOTTOM_PADDING = 70;
 
         private List<PackageMetric> metrics = List.of();
+        private List<PlotPoint> plotPoints = List.of();
 
         private MetricsPlotPanel() {
             setPreferredSize(new Dimension(720, 340));
             setBackground(Color.WHITE);
+            setToolTipText("");
         }
 
         void setMetrics(List<PackageMetric> metrics) {
@@ -358,24 +362,49 @@ final class CodeVisualizerToolWindow {
 
             if (metrics.isEmpty()) {
                 g2.drawString("Run Analyze Project to plot packages.", left + 16, top + 32);
+                plotPoints = List.of();
                 g2.dispose();
                 return;
             }
 
+            List<PlotPoint> nextPlotPoints = new ArrayList<>();
             for (PackageMetric metric : metrics) {
                 int x = left + scale(metric.instability(), right - left);
                 int y = bottom - scale(metric.abstractness(), bottom - top);
                 int diameter = 12 + Math.min(20, metric.classCount() * 4);
-                int labelX = Math.min(x + 8, right - 120);
-                int labelY = Math.max(top + 14, y - 8);
+                int hitDiameter = Math.max(22, diameter);
+                Rectangle hitBox = new Rectangle(
+                        x - hitDiameter / 2,
+                        y - hitDiameter / 2,
+                        hitDiameter,
+                        hitDiameter
+                );
+                nextPlotPoints.add(new PlotPoint(hitBox, metric));
 
                 g2.setColor(distanceColor(metric.distanceFromMainSequence()));
                 g2.fillOval(x - diameter / 2, y - diameter / 2, diameter, diameter);
-                g2.setColor(new Color(32, 32, 32));
-                drawFittedLabel(g2, shortPackageName(metric.packageName()), labelX, labelY, right - labelX);
             }
+            plotPoints = List.copyOf(nextPlotPoints);
 
             g2.dispose();
+        }
+
+        @Override
+        public String getToolTipText(MouseEvent event) {
+            for (PlotPoint plotPoint : plotPoints) {
+                if (plotPoint.bounds().contains(event.getPoint())) {
+                    PackageMetric metric = plotPoint.metric();
+                    return "<html><b>" + metric.packageName() + "</b><br/>"
+                            + "Classes: " + metric.classCount() + "<br/>"
+                            + "Abstract: " + metric.abstractClassCount() + "<br/>"
+                            + "Incoming: " + metric.incomingDependencies() + "<br/>"
+                            + "Outgoing: " + metric.outgoingDependencies() + "<br/>"
+                            + "A: " + String.format("%.2f", metric.abstractness()) + "<br/>"
+                            + "I: " + String.format("%.2f", metric.instability()) + "<br/>"
+                            + "D: " + String.format("%.2f", metric.distanceFromMainSequence()) + "</html>";
+                }
+            }
+            return null;
         }
 
         private void drawAxisTicks(Graphics2D g2, int left, int top, int right, int bottom) {
@@ -420,27 +449,7 @@ final class CodeVisualizerToolWindow {
             return MetricLevel.LOW.color();
         }
 
-        private String shortPackageName(String packageName) {
-            if ("(default)".equals(packageName)) {
-                return packageName;
-            }
-            int lastDot = packageName.lastIndexOf('.');
-            if (lastDot < 0 || lastDot == packageName.length() - 1) {
-                return packageName;
-            }
-            return packageName.substring(lastDot + 1);
-        }
-
-        private void drawFittedLabel(Graphics2D g2, String text, int x, int y, int maxWidth) {
-            if (maxWidth <= 16) {
-                return;
-            }
-            FontMetrics metrics = g2.getFontMetrics();
-            String label = text;
-            while (label.length() > 4 && metrics.stringWidth(label) > maxWidth) {
-                label = label.substring(0, label.length() - 4) + "...";
-            }
-            g2.drawString(label, x, y);
+        private record PlotPoint(Rectangle bounds, PackageMetric metric) {
         }
     }
 }
