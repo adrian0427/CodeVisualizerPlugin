@@ -100,20 +100,6 @@ cd final-project-angelandadrian
 - Confirm hovering over package dots shows package metrics.
 - Confirm the `PlantUML` tab shows generated PlantUML text and a rendered diagram when rendering is available.
 
-## Assignment Checklist
-
-- Java 21: yes
-- Gradle project: yes
-- IntelliJ IDEA plugin: yes
-- PSI-based Java analysis: yes
-- Analyzes the opened IDE project: yes
-- Finds `.java` files: yes
-- Tool window named `Code Visualizer`: yes
-- Three tabs: `Grid`, `Metrics`, `PlantUML`: yes
-- Rendered PlantUML diagram: yes
-- Grid items navigate to source files: yes
-- No URL input: yes
-
 ## Assumptions and Limitations
 
 - The plugin is focused on Java projects.
