@@ -18,6 +18,7 @@ import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.ListSelectionModel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
@@ -27,6 +28,8 @@ import javax.swing.JTextArea;
 import javax.swing.SwingConstants;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableColumnModel;
+import java.awt.AlphaComposite;
+import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -53,6 +56,7 @@ final class CodeVisualizerToolWindow {
             "I",
             "D"
     };
+    private static final int PACKAGE_COLUMN = 0;
 
     private final Project project;
     private final JPanel content;
@@ -134,6 +138,12 @@ final class CodeVisualizerToolWindow {
         JPanel metricsTab = new JPanel(new BorderLayout());
         metricTable = createMetricTable(createMetricTableModel(metrics));
         metricTable.setAutoCreateRowSorter(true);
+        metricTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        metricTable.getSelectionModel().addListSelectionListener(event -> {
+            if (!event.getValueIsAdjusting()) {
+                updateSelectedPackageFromTable();
+            }
+        });
 
         JSplitPane splitPane = new JSplitPane(
                 JSplitPane.VERTICAL_SPLIT,
@@ -152,7 +162,7 @@ final class CodeVisualizerToolWindow {
                 Point point = event.getPoint();
                 int row = rowAtPoint(point);
                 int column = columnAtPoint(point);
-                if (row >= 0 && column == 0) {
+                if (row >= 0 && column == PACKAGE_COLUMN) {
                     Object value = getValueAt(row, column);
                     return value == null ? null : value.toString();
                 }
@@ -167,7 +177,7 @@ final class CodeVisualizerToolWindow {
 
     private void configureMetricTableColumns(JTable table) {
         TableColumnModel columns = table.getColumnModel();
-        columns.getColumn(0).setPreferredWidth(220);
+        columns.getColumn(PACKAGE_COLUMN).setPreferredWidth(220);
         for (int i = 1; i < columns.getColumnCount(); i++) {
             columns.getColumn(i).setPreferredWidth(72);
         }
@@ -226,6 +236,9 @@ final class CodeVisualizerToolWindow {
         renderGrid(result.files());
         metricsPlotPanel.setMetrics(result.packages());
         updateMetricsTable(result.packages());
+        if (!result.packages().isEmpty()) {
+            metricTable.setRowSelectionInterval(0, 0);
+        }
         renderPlantUml(result.plantUml(), renderedPlantUml);
     }
 
@@ -238,6 +251,18 @@ final class CodeVisualizerToolWindow {
     private void updateMetricsTable(List<PackageMetric> metrics) {
         metricTable.setModel(createMetricTableModel(metrics));
         configureMetricTableColumns(metricTable);
+    }
+
+    private void updateSelectedPackageFromTable() {
+        int selectedRow = metricTable.getSelectedRow();
+        if (selectedRow < 0) {
+            metricsPlotPanel.setSelectedPackageName(null);
+            return;
+        }
+
+        int modelRow = metricTable.convertRowIndexToModel(selectedRow);
+        Object packageName = metricTable.getModel().getValueAt(modelRow, PACKAGE_COLUMN);
+        metricsPlotPanel.setSelectedPackageName(packageName == null ? null : packageName.toString());
     }
 
     private DefaultTableModel createMetricTableModel(List<PackageMetric> metrics) {
@@ -327,6 +352,7 @@ final class CodeVisualizerToolWindow {
 
         private List<PackageMetric> metrics = List.of();
         private List<PlotPoint> plotPoints = List.of();
+        private String selectedPackageName;
 
         private MetricsPlotPanel() {
             setPreferredSize(new Dimension(720, 340));
@@ -336,6 +362,11 @@ final class CodeVisualizerToolWindow {
 
         void setMetrics(List<PackageMetric> metrics) {
             this.metrics = List.copyOf(metrics);
+            repaint();
+        }
+
+        void setSelectedPackageName(String selectedPackageName) {
+            this.selectedPackageName = selectedPackageName;
             repaint();
         }
 
@@ -368,10 +399,12 @@ final class CodeVisualizerToolWindow {
             }
 
             List<PlotPoint> nextPlotPoints = new ArrayList<>();
+            PackageMetric selectedMetric = null;
             for (PackageMetric metric : metrics) {
                 int x = left + scale(metric.instability(), right - left);
                 int y = bottom - scale(metric.abstractness(), bottom - top);
                 int diameter = 12 + Math.min(20, metric.classCount() * 4);
+                boolean selected = metric.packageName().equals(selectedPackageName);
                 int hitDiameter = Math.max(22, diameter);
                 Rectangle hitBox = new Rectangle(
                         x - hitDiameter / 2,
@@ -382,11 +415,50 @@ final class CodeVisualizerToolWindow {
                 nextPlotPoints.add(new PlotPoint(hitBox, metric));
 
                 g2.setColor(distanceColor(metric.distanceFromMainSequence()));
+                if (selected) {
+                    selectedMetric = metric;
+                    continue;
+                }
+                g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.35f));
                 g2.fillOval(x - diameter / 2, y - diameter / 2, diameter, diameter);
+                g2.setComposite(AlphaComposite.SrcOver);
             }
             plotPoints = List.copyOf(nextPlotPoints);
 
+            if (selectedMetric != null) {
+                drawSelectedMetric(g2, selectedMetric, left, top, right, bottom);
+            }
+
             g2.dispose();
+        }
+
+        private void drawSelectedMetric(Graphics2D g2, PackageMetric metric, int left, int top, int right, int bottom) {
+            int x = left + scale(metric.instability(), right - left);
+            int y = bottom - scale(metric.abstractness(), bottom - top);
+            int diameter = 18 + Math.min(24, metric.classCount() * 4);
+
+            g2.setColor(distanceColor(metric.distanceFromMainSequence()));
+            g2.fillOval(x - diameter / 2, y - diameter / 2, diameter, diameter);
+            g2.setStroke(new BasicStroke(2.0f));
+            g2.setColor(new Color(32, 32, 32));
+            g2.drawOval(x - diameter / 2, y - diameter / 2, diameter, diameter);
+
+            String label = metric.packageName();
+            FontMetrics fontMetrics = g2.getFontMetrics();
+            int labelWidth = fontMetrics.stringWidth(label);
+            int labelX = x + diameter / 2 + 8;
+            if (labelX + labelWidth > right) {
+                labelX = Math.max(left, x - diameter / 2 - labelWidth - 8);
+            }
+            int labelY = Math.max(top + 16, y - diameter / 2 - 8);
+            g2.drawString(label, labelX, labelY);
+            g2.drawString(
+                    "A=" + String.format("%.2f", metric.abstractness())
+                            + " I=" + String.format("%.2f", metric.instability())
+                            + " D=" + String.format("%.2f", metric.distanceFromMainSequence()),
+                    labelX,
+                    labelY + 16
+            );
         }
 
         @Override
