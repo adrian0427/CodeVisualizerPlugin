@@ -57,7 +57,7 @@ Relationships are extracted from PSI using inheritance, interface implementation
 
 ## Class Diagram
 
-![Class Diagram](305_UML.png)
+![Class Diagram](src/305_UML.png)
 
 ## How to Run
 
