@@ -1,3 +1,5 @@
+[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596.svg)](https://classroom.github.com/a/sXmj90qY)
+
 ![Static Badge](https://img.shields.io/badge/authors-adrian0427_Angel--Alonso-orange)
 ![Java](https://img.shields.io/badge/Java-21+-blue)
 ![Platform](https://img.shields.io/badge/platform-IntelliJ_IDEA_Plugin-orange)
@@ -66,8 +68,8 @@ Requirements:
 - Gradle wrapper included in this repository
 
 ```bash
-git clone https://github.com/adrian0427/CodeVisualizerPlugin.git
-cd CodeVisualizerPlugin
+git clone https://github.com/CSC3100/final-project-angelandadrian.git
+cd final-project-angelandadrian
 ./gradlew build
 ./gradlew runIde
 ```
