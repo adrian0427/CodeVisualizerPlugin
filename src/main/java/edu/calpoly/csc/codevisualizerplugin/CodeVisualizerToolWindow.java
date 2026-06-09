@@ -26,6 +26,7 @@ import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.SwingConstants;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableColumnModel;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -33,7 +34,9 @@ import java.awt.FlowLayout;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Point;
 import java.awt.RenderingHints;
+import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.util.List;
 
@@ -127,18 +130,45 @@ final class CodeVisualizerToolWindow {
 
     private JComponent createMetricsTab(List<PackageMetric> metrics) {
         JPanel metricsTab = new JPanel(new BorderLayout());
-        metricTable = new JTable(createMetricTableModel(metrics));
+        metricTable = createMetricTable(createMetricTableModel(metrics));
         metricTable.setAutoCreateRowSorter(true);
-        metricTable.setRowHeight(30);
 
         JSplitPane splitPane = new JSplitPane(
                 JSplitPane.VERTICAL_SPLIT,
                 new JScrollPane(metricsPlotPanel),
                 new JScrollPane(metricTable)
         );
-        splitPane.setResizeWeight(0.65);
+        splitPane.setResizeWeight(0.58);
         metricsTab.add(splitPane, BorderLayout.CENTER);
         return metricsTab;
+    }
+
+    private JTable createMetricTable(DefaultTableModel model) {
+        JTable table = new JTable(model) {
+            @Override
+            public String getToolTipText(MouseEvent event) {
+                Point point = event.getPoint();
+                int row = rowAtPoint(point);
+                int column = columnAtPoint(point);
+                if (row >= 0 && column == 0) {
+                    Object value = getValueAt(row, column);
+                    return value == null ? null : value.toString();
+                }
+                return super.getToolTipText(event);
+            }
+        };
+        table.setRowHeight(28);
+        table.setFillsViewportHeight(true);
+        configureMetricTableColumns(table);
+        return table;
+    }
+
+    private void configureMetricTableColumns(JTable table) {
+        TableColumnModel columns = table.getColumnModel();
+        columns.getColumn(0).setPreferredWidth(220);
+        for (int i = 1; i < columns.getColumnCount(); i++) {
+            columns.getColumn(i).setPreferredWidth(72);
+        }
     }
 
     private JComponent createPlantUmlTab() {
@@ -205,6 +235,7 @@ final class CodeVisualizerToolWindow {
 
     private void updateMetricsTable(List<PackageMetric> metrics) {
         metricTable.setModel(createMetricTableModel(metrics));
+        configureMetricTableColumns(metricTable);
     }
 
     private DefaultTableModel createMetricTableModel(List<PackageMetric> metrics) {
@@ -287,10 +318,15 @@ final class CodeVisualizerToolWindow {
     }
 
     private static final class MetricsPlotPanel extends JPanel {
+        private static final int LEFT_PADDING = 72;
+        private static final int TOP_PADDING = 44;
+        private static final int RIGHT_PADDING = 40;
+        private static final int BOTTOM_PADDING = 70;
+
         private List<PackageMetric> metrics = List.of();
 
         private MetricsPlotPanel() {
-            setPreferredSize(new Dimension(720, 480));
+            setPreferredSize(new Dimension(720, 340));
             setBackground(Color.WHITE);
         }
 
@@ -305,18 +341,20 @@ final class CodeVisualizerToolWindow {
             Graphics2D g2 = (Graphics2D) graphics.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-            int left = 56;
-            int top = 32;
-            int right = getWidth() - 32;
-            int bottom = getHeight() - 48;
+            int left = LEFT_PADDING;
+            int top = TOP_PADDING;
+            int right = getWidth() - RIGHT_PADDING;
+            int bottom = getHeight() - BOTTOM_PADDING;
 
             g2.setColor(new Color(64, 64, 64));
             g2.drawLine(left, bottom, right, bottom);
             g2.drawLine(left, bottom, left, top);
-            g2.drawString("Instability (I)", right - 86, bottom + 28);
-            g2.drawString("Abstractness (A)", 8, top + 8);
+            drawAxisTicks(g2, left, top, right, bottom);
+            g2.drawString("Instability (I)", Math.max(left, right - 100), bottom + 44);
+            g2.drawString("Abstractness (A)", 12, top - 12);
             g2.drawString("main sequence", left + 12, bottom - 12);
             g2.drawLine(left, bottom, right, top);
+            drawLegend(g2, left, getHeight() - 22);
 
             if (metrics.isEmpty()) {
                 g2.drawString("Run Analyze Project to plot packages.", left + 16, top + 32);
@@ -328,14 +366,44 @@ final class CodeVisualizerToolWindow {
                 int x = left + scale(metric.instability(), right - left);
                 int y = bottom - scale(metric.abstractness(), bottom - top);
                 int diameter = 12 + Math.min(20, metric.classCount() * 4);
+                int labelX = Math.min(x + 8, right - 120);
+                int labelY = Math.max(top + 14, y - 8);
 
                 g2.setColor(distanceColor(metric.distanceFromMainSequence()));
                 g2.fillOval(x - diameter / 2, y - diameter / 2, diameter, diameter);
                 g2.setColor(new Color(32, 32, 32));
-                drawFittedLabel(g2, metric.packageName(), x + 8, y - 8, right - x - 8);
+                drawFittedLabel(g2, shortPackageName(metric.packageName()), labelX, labelY, right - labelX);
             }
 
             g2.dispose();
+        }
+
+        private void drawAxisTicks(Graphics2D g2, int left, int top, int right, int bottom) {
+            FontMetrics fontMetrics = g2.getFontMetrics();
+            for (int i = 0; i <= 4; i++) {
+                double value = i / 4.0;
+                int x = left + scale(value, right - left);
+                int y = bottom - scale(value, bottom - top);
+                String label = String.format("%.2f", value);
+
+                g2.drawLine(x, bottom - 4, x, bottom + 4);
+                g2.drawString(label, x - fontMetrics.stringWidth(label) / 2, bottom + 20);
+                g2.drawLine(left - 4, y, left + 4, y);
+                g2.drawString(label, left - fontMetrics.stringWidth(label) - 8, y + 5);
+            }
+        }
+
+        private void drawLegend(Graphics2D g2, int x, int y) {
+            drawLegendItem(g2, x, y, MetricLevel.LOW.color(), "low D");
+            drawLegendItem(g2, x + 76, y, MetricLevel.MEDIUM.color(), "mid D");
+            drawLegendItem(g2, x + 152, y, MetricLevel.HIGH.color(), "high D");
+        }
+
+        private void drawLegendItem(Graphics2D g2, int x, int y, Color color, String label) {
+            g2.setColor(color);
+            g2.fillOval(x, y - 10, 10, 10);
+            g2.setColor(new Color(32, 32, 32));
+            g2.drawString(label, x + 16, y);
         }
 
         private int scale(double value, int length) {
@@ -350,6 +418,17 @@ final class CodeVisualizerToolWindow {
                 return MetricLevel.MEDIUM.color();
             }
             return MetricLevel.LOW.color();
+        }
+
+        private String shortPackageName(String packageName) {
+            if ("(default)".equals(packageName)) {
+                return packageName;
+            }
+            int lastDot = packageName.lastIndexOf('.');
+            if (lastDot < 0 || lastDot == packageName.length() - 1) {
+                return packageName;
+            }
+            return packageName.substring(lastDot + 1);
         }
 
         private void drawFittedLabel(Graphics2D g2, String text, int x, int y, int maxWidth) {
